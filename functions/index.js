@@ -37,62 +37,67 @@ exports.events = functions.https.onRequest((request, response) => {
     const endDate = moment().format("YYYY-MM-DD");
 
     plaidClient
+      // Fetch transactions from the last 30 days
       .getTransactions(functions.config().plaid.token, startDate, endDate, {
         account_ids: functions.config().plaid.account_ids.split(" ")
       })
-      .then(res =>
-        res.transactions
-          .filter(transaction => !transaction.pending)
-          .forEach(transaction =>
-            ref
-              .child(transaction.transaction_id)
-              .once("value")
-              .then(
-                snapshot =>
-                  !snapshot.exists() &&
-                  ref
-                    .child(transaction.transaction_id)
-                    .set(transaction)
-                    .then(() =>
-                      sw.createExpense({
-                        users: [
-                          {
-                            user_id: functions.config().splitwise.user1_id,
-                            paid_share: transaction.amount,
-                            owed_share:
-                              transaction.amount *
-                              Number(functions.config().splitwise.user1_share)
-                          },
-                          {
-                            user_id: functions.config().splitwise.user2_id,
-                            owed_share:
-                              transaction.amount *
-                              Number(functions.config().splitwise.user2_share)
-                          }
-                        ],
-                        cost: transaction.amount,
-                        description: transaction.merchant_name,
-                        group_id: functions.config().splitwise.group_id
-                      })
-                    )
-                    .then(res =>
-                      functions.logger.info(
-                        `Added: ${transaction.transaction_id}`
-                      )
-                    )
-              )
-          )
-      )
+      .then(res => {
+        functions.logger.info(res);
+        return (
+          res.transactions
+            // Filter out transactions that are pending
+            .filter(transaction => !transaction.pending)
+            .forEach(processTransaction)
+        );
+      })
       .catch(err => {
         if (err !== null) {
-          if (err instanceof plaid.PlaidError) {
-            functions.logger.error(err.error_code + ": " + err.error_message);
-          } else {
-            functions.logger.error(err.toString());
-          }
+          functions.logger.error(
+            err instanceof plaid.PlaidError
+              ? err.error_code + ": " + err.error_message
+              : err.toString()
+          );
         }
       });
   }
 
   response.sendStatus(200);
 });
+
+const processTransaction = transaction =>
+  ref
+    .child(transaction.transaction_id)
+    .once("value")
+    .then(
+      snapshot =>
+        // Filter out existing transactions
+        !snapshot.exists() &&
+        Promise.all(
+          // Write to Realtime Database
+          ref.child(transaction.transaction_id).set(transaction),
+          // Create expense in Splitwise
+          createExpense(transaction)
+        ).then(res =>
+          functions.logger.info(`Added: ${transaction.transaction_id}`)
+        )
+    );
+
+const createExpense = transaction =>
+  sw.createExpense({
+    users: [
+      {
+        user_id: functions.config().splitwise.user1_id,
+        paid_share: transaction.amount,
+        owed_share:
+          transaction.amount * Number(functions.config().splitwise.user1_share)
+      },
+      {
+        user_id: functions.config().splitwise.user2_id,
+        owed_share:
+          transaction.amount * Number(functions.config().splitwise.user2_share)
+      }
+    ],
+    cost: transaction.amount,
+    description: transaction.merchant_name,
+    group_id: functions.config().splitwise.group_id
+  });
