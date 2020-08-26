@@ -28,6 +28,8 @@ const sw = Splitwise({
 });
 
 exports.events = functions.https.onRequest((request, response) => {
+  functions.logger.info(request.body);
+
   if (request.body.webhook_code === "DEFAULT_UPDATE") {
     const startDate = moment()
       .subtract(30, "days")
@@ -35,8 +37,8 @@ exports.events = functions.https.onRequest((request, response) => {
     const endDate = moment().format("YYYY-MM-DD");
 
     plaidClient
-      .getTransactions(functions.config().plain.token, startDate, endDate, {
-        account_ids: functions.config().plaid.accountids.split(" ")
+      .getTransactions(functions.config().plaid.token, startDate, endDate, {
+        account_ids: functions.config().plaid.account_ids.split(" ")
       })
       .then(res =>
         res.transactions
@@ -55,19 +57,28 @@ exports.events = functions.https.onRequest((request, response) => {
                       sw.createExpense({
                         users: [
                           {
-                            user_id: "23926",
+                            user_id: functions.config().splitwise.user1_id,
                             paid_share: transaction.amount,
-                            owed_share: transaction.amount * 0.57
+                            owed_share:
+                              transaction.amount *
+                              Number(functions.config().splitwise.user1_share)
                           },
                           {
-                            user_id: "33412134",
-                            owed_share: transaction.amount * 0.43
+                            user_id: functions.config().splitwise.user2_id,
+                            owed_share:
+                              transaction.amount *
+                              Number(functions.config().splitwise.user2_share)
                           }
                         ],
                         cost: transaction.amount,
                         description: transaction.merchant_name,
-                        group_id: "19443116"
+                        group_id: functions.config().splitwise.group_id
                       })
+                    )
+                    .then(res =>
+                      functions.logger.info(
+                        `Added: ${transaction.transaction_id}`
+                      )
                     )
               )
           )
@@ -82,8 +93,6 @@ exports.events = functions.https.onRequest((request, response) => {
         }
       });
   }
-
-  functions.logger.info(request.body);
 
   response.sendStatus(200);
 });
