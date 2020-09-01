@@ -72,12 +72,12 @@ const processTransaction = transaction =>
       snapshot =>
         // Filter out existing transactions
         !snapshot.exists() &&
-        Promise.all(
+        Promise.all([
           // Write to Realtime Database
           ref.child(transaction.transaction_id).set(transaction),
           // Create expense in Splitwise
           createExpense(transaction)
-        ).then(res =>
+        ]).then(res =>
           functions.logger.info(`Added: ${transaction.transaction_id}`)
         )
     );
