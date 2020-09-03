@@ -45,8 +45,10 @@ exports.events = functions.https.onRequest((request, response) => {
         functions.logger.info(res);
         return (
           res.transactions
-            // Filter out transactions that are pending
-            .filter(transaction => !transaction.pending)
+            // Filter out transactions that are pending and/or credits
+            .filter(
+              transaction => !transaction.pending && transaction.amount > 0
+            )
             .forEach(processTransaction)
         );
       })
@@ -80,7 +82,12 @@ const processTransaction = transaction =>
         ]).then(res =>
           functions.logger.info(`Added: ${transaction.transaction_id}`)
         )
-    );
+    )
+    .catch(err => {
+      if (err !== null) {
+        functions.logger.error(err.toString());
+      }
+    });
 
 const createExpense = transaction =>
   sw.createExpense({
