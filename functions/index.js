@@ -28,8 +28,6 @@ const sw = Splitwise({
 });
 
 exports.events = functions.https.onRequest((request, response) => {
-  functions.logger.info(request.body);
-
   if (request.body.webhook_code === "DEFAULT_UPDATE") {
     const startDate = moment()
       .subtract(30, "days")
@@ -41,17 +39,14 @@ exports.events = functions.https.onRequest((request, response) => {
       .getTransactions(functions.config().plaid.token, startDate, endDate, {
         account_ids: functions.config().plaid.account_ids.split(" ")
       })
-      .then(res => {
-        functions.logger.info(res);
-        return (
-          res.transactions
-            // Filter out transactions that are pending and/or credits
-            .filter(
-              transaction => !transaction.pending && transaction.amount > 0
-            )
-            .forEach(processTransaction)
-        );
-      })
+      .then(res =>
+        res.transactions
+          // Filter out transactions that are pending and/or less than $10
+          .filter(
+            transaction => !transaction.pending && transaction.amount >= 10
+          )
+          .forEach(processTransaction)
+      )
       .catch(err => {
         if (err !== null) {
           functions.logger.error(
@@ -80,7 +75,9 @@ const processTransaction = transaction =>
           // Create expense in Splitwise
           createExpense(transaction)
         ]).then(res =>
-          functions.logger.info(`Added: ${transaction.transaction_id}`)
+          functions.logger.info(
+            `Added: ${transaction.merchant_name} (${transaction.transaction_id})`
+          )
         )
     )
     .catch(err => {
