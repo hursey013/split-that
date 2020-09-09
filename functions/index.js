@@ -27,6 +27,13 @@ const sw = Splitwise({
   accessToken: functions.config().splitwise.token
 });
 
+// Map transaction categories
+const categoryTable = {
+  13005000: 13, // Dining out
+  19051000: 14, // Household supplies
+  22009000: 33 // Gas/fuel
+}
+
 exports.events = functions.https.onRequest((request, response) => {
   if (request.body.webhook_code === "DEFAULT_UPDATE") {
     const startDate = moment()
@@ -103,5 +110,6 @@ const createExpense = transaction =>
     ],
     cost: transaction.amount,
     description: transaction.merchant_name,
-    group_id: functions.config().splitwise.group_id
+    group_id: functions.config().splitwise.group_id,
+    category_id: categoryTable[transaction.category_id] || null
   });
