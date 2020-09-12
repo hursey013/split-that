@@ -76,7 +76,9 @@ const processTransaction = transaction =>
           createExpense(transaction)
         ]).then(res =>
           functions.logger.info(
-            `Added: ${transaction.merchant_name} (${transaction.transaction_id})`
+            `Added: ${transaction.merchant_name || transaction.name} (${
+              transaction.transaction_id
+            })`
           )
         )
     )
@@ -102,6 +104,6 @@ const createExpense = transaction =>
       }
     ],
     cost: transaction.amount,
-    description: transaction.merchant_name,
+    description: transaction.merchant_name || transaction.name,
     group_id: functions.config().splitwise.group_id
   });
