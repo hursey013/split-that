@@ -32,9 +32,11 @@ const categoryTable = {
   13005000: 13, // Dining out
   19051000: 14, // Household supplies
   22009000: 33 // Gas/fuel
-}
+};
 
 exports.events = functions.https.onRequest((request, response) => {
+  functions.logger.info(JSON.stringify(request.body, null, 2));
+
   if (request.body.webhook_code === "DEFAULT_UPDATE") {
     const startDate = moment()
       .subtract(30, "days")
@@ -82,11 +84,7 @@ const processTransaction = transaction =>
           // Create expense in Splitwise
           createExpense(transaction)
         ]).then(res =>
-          functions.logger.info(
-            `Added: ${transaction.merchant_name || transaction.name} (${
-              transaction.transaction_id
-            })`
-          )
+          functions.logger.info(JSON.stringify(transaction, null, 2))
         )
     )
     .catch(err => {
@@ -111,7 +109,14 @@ const createExpense = transaction =>
       }
     ],
     cost: transaction.amount,
-    description: transaction.merchant_name || transaction.name,
+    description: toTitleCase(transaction.merchant_name || transaction.name),
     group_id: functions.config().splitwise.group_id,
     category_id: categoryTable[transaction.category_id] || null
   });
+
+const toTitleCase = string =>
+  string
+    .replace("TST* ", "")
+    .split(" ")
+    .map(w => w[0].toUpperCase() + w.substr(1).toLowerCase())
+    .join(" ");
