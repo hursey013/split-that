@@ -94,25 +94,29 @@ const processTransaction = transaction =>
     });
 
 const createExpense = transaction =>
-  sw.createExpense({
-    users: [
-      {
-        user_id: functions.config().splitwise.user1_id,
-        paid_share: transaction.amount,
-        owed_share:
-          transaction.amount * Number(functions.config().splitwise.user1_share)
-      },
-      {
-        user_id: functions.config().splitwise.user2_id,
-        owed_share:
-          transaction.amount * Number(functions.config().splitwise.user2_share)
-      }
-    ],
-    cost: transaction.amount,
-    description: toTitleCase(transaction.merchant_name || transaction.name),
-    group_id: functions.config().splitwise.group_id,
-    category_id: categoryTable[transaction.category_id] || null
-  });
+  sw
+    .createExpense({
+      users: [
+        {
+          user_id: functions.config().splitwise.user1_id,
+          paid_share: transaction.amount,
+          owed_share:
+            transaction.amount *
+            Number(functions.config().splitwise.user1_share)
+        },
+        {
+          user_id: functions.config().splitwise.user2_id,
+          owed_share:
+            transaction.amount *
+            Number(functions.config().splitwise.user2_share)
+        }
+      ],
+      cost: transaction.amount,
+      description: toTitleCase(transaction.merchant_name || transaction.name),
+      group_id: functions.config().splitwise.group_id,
+      category_id: categoryTable[transaction.category_id] || null
+    })
+    .then(res => functions.logger.info(JSON.stringify(res, null, 2)));
 
 const toTitleCase = string =>
   string
