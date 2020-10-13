@@ -74,19 +74,19 @@ const processTransaction = transaction =>
   ref
     .child(transaction.transaction_id)
     .once("value")
-    .then(
-      snapshot =>
-        // Filter out existing transactions
-        !snapshot.exists() &&
-        Promise.all([
-          // Write to Realtime Database
-          ref.child(transaction.transaction_id).set(transaction),
-          // Create expense in Splitwise
-          createExpense(transaction)
-        ]).then(res =>
-          functions.logger.info(JSON.stringify(transaction, null, 2))
-        )
-    )
+    .then(snapshot => {
+      // Filter out existing transactions
+      if (!snapshot.exists()) {
+        functions.logger.info(JSON.stringify(transaction, null, 2));
+
+        return createExpense(transaction).then(({ id }) =>
+          ref
+            .child(transaction.transaction_id)
+            .set({ ...transaction, splitwise_id: id })
+        );
+      }
+      return false;
+    })
     .catch(err => {
       if (err !== null) {
         functions.logger.error(err.toString());
@@ -94,29 +94,25 @@ const processTransaction = transaction =>
     });
 
 const createExpense = transaction =>
-  sw
-    .createExpense({
-      users: [
-        {
-          user_id: functions.config().splitwise.user1_id,
-          paid_share: transaction.amount,
-          owed_share:
-            transaction.amount *
-            Number(functions.config().splitwise.user1_share)
-        },
-        {
-          user_id: functions.config().splitwise.user2_id,
-          owed_share:
-            transaction.amount *
-            Number(functions.config().splitwise.user2_share)
-        }
-      ],
-      cost: transaction.amount,
-      description: toTitleCase(transaction.merchant_name || transaction.name),
-      group_id: functions.config().splitwise.group_id,
-      category_id: categoryTable[transaction.category_id] || null
-    })
-    .then(res => functions.logger.info(JSON.stringify(res, null, 2)));
+  sw.createExpense({
+    users: [
+      {
+        user_id: functions.config().splitwise.user1_id,
+        paid_share: transaction.amount,
+        owed_share:
+          transaction.amount * Number(functions.config().splitwise.user1_share)
+      },
+      {
+        user_id: functions.config().splitwise.user2_id,
+        owed_share:
+          transaction.amount * Number(functions.config().splitwise.user2_share)
+      }
+    ],
+    cost: transaction.amount,
+    description: toTitleCase(transaction.merchant_name || transaction.name),
+    group_id: functions.config().splitwise.group_id,
+    category_id: categoryTable[transaction.category_id] || null
+  });
 
 const toTitleCase = string =>
   string
