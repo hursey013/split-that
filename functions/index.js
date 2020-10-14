@@ -44,17 +44,15 @@ exports.events = functions.https.onRequest((request, response) => {
     const endDate = moment().format("YYYY-MM-DD");
 
     plaidClient
-      // Fetch transactions from the last 30 days
+      // Fetch transactions from specified accounts for the last 30 days
       .getTransactions(functions.config().plaid.token, startDate, endDate, {
         account_ids: functions.config().plaid.account_ids.split(" ")
       })
       .then(res =>
         res.transactions
-          // Filter out transactions that are pending and/or less than $10
-          .filter(
-            transaction => !transaction.pending && transaction.amount >= 10
-          )
-          .forEach(processTransaction)
+          // Filter out transactions that are less than $10
+          .filter(transaction => transaction.amount >= 10)
+          .map(processTransaction)
       )
       .catch(err => {
         if (err !== null) {
@@ -74,47 +72,64 @@ const processTransaction = transaction =>
   ref
     .child(transaction.transaction_id)
     .once("value")
-    .then(snapshot => {
-      // Filter out existing transactions
-      if (!snapshot.exists()) {
-        functions.logger.info(JSON.stringify(transaction, null, 2));
-
-        return createExpense(transaction).then(({ id }) =>
+    .then(
+      snapshot =>
+        // Filter out existing transactions
+        !snapshot.exists() &&
+        createExpense(transaction).then(([{ id: splitwise_id }]) =>
           ref
             .child(transaction.transaction_id)
-            .set({ ...transaction, splitwise_id: id })
-        );
-      }
-      return false;
-    })
-    .catch(err => {
-      if (err !== null) {
-        functions.logger.error(err.toString());
-      }
-    });
+            .set({ ...transaction, splitwise_id })
+        )
+    );
 
-const createExpense = transaction =>
-  sw.createExpense({
+const createExpense = transaction => {
+  functions.logger.info(JSON.stringify(transaction, null, 2));
+
+  const {
+    amount,
+    category_id,
+    merchant_name,
+    name,
+    pending,
+    pending_transaction_id
+  } = transaction;
+
+  const expense = {
     users: [
       {
         user_id: functions.config().splitwise.user1_id,
-        paid_share: transaction.amount,
-        owed_share:
-          transaction.amount * Number(functions.config().splitwise.user1_share)
+        paid_share: amount,
+        owed_share: amount * Number(functions.config().splitwise.user1_share)
       },
       {
         user_id: functions.config().splitwise.user2_id,
-        owed_share:
-          transaction.amount * Number(functions.config().splitwise.user2_share)
+        owed_share: amount * Number(functions.config().splitwise.user2_share)
       }
     ],
-    cost: transaction.amount,
-    description: toTitleCase(transaction.merchant_name || transaction.name),
+    cost: amount,
+    description: `${sanitizeString(merchant_name || name)}${pending &&
+      ` (Pending)`}`,
     group_id: functions.config().splitwise.group_id,
-    category_id: categoryTable[transaction.category_id] || null
-  });
+    category_id: categoryTable[category_id] || null
+  };
 
-const toTitleCase = string =>
+  if (!pending && pending_transaction_id) {
+    return ref
+      .child(pending_transaction_id)
+      .once("value")
+      .then(snapshot => {
+        const { category_id, ...rest } = expense;
+        return Promise.all([
+          sw.updateExpense({ id: snapshot.val().splitwise_id, ...rest }),
+          ref.child(pending_transaction_id).remove()
+        ]);
+      });
+  }
+  return Promise.all([sw.createExpense(expense)]);
+};
+
+const sanitizeString = string =>
   string
     .replace("TST* ", "")
     .split(" ")
