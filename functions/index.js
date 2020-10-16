@@ -30,6 +30,7 @@ const sw = Splitwise({
 // Map transaction categories
 const categoryTable = {
   13005000: 13, // Dining out
+  13005032: 13, // Fast food
   19051000: 14, // Household supplies
   22009000: 33 // Gas/fuel
 };
@@ -76,11 +77,12 @@ const processTransaction = transaction =>
       snapshot =>
         // Filter out existing transactions
         !snapshot.exists() &&
-        createExpense(transaction).then(([{ id: splitwise_id }]) =>
-          ref
+        createExpense(transaction).then(([splitwise]) => {
+          functions.logger.info(JSON.stringify(splitwise, null, 2));
+          return ref
             .child(transaction.transaction_id)
-            .set({ ...transaction, splitwise_id })
-        )
+            .set({ ...transaction, splitwise_id: splitwise[0].id });
+        })
     );
 
 const createExpense = transaction => {
@@ -108,8 +110,9 @@ const createExpense = transaction => {
       }
     ],
     cost: amount,
-    description: `${sanitizeString(merchant_name || name)}${pending &&
-      ` (Pending)`}`,
+    description: `${sanitizeString(merchant_name || name)}${
+      pending ? ` (pending)` : ""
+    }`,
     group_id: functions.config().splitwise.group_id,
     category_id: categoryTable[category_id] || null
   };
