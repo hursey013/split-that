@@ -81,7 +81,7 @@ const processTransaction = transaction =>
           functions.logger.info(JSON.stringify(splitwise, null, 2));
           return ref
             .child(transaction.transaction_id)
-            .set({ ...transaction, splitwise_id: splitwise[0].id });
+            .set({ ...transaction, splitwise_id: splitwise.id });
         })
     );
 
@@ -123,10 +123,16 @@ const createExpense = transaction => {
       .once("value")
       .then(snapshot => {
         const { category_id, ...rest } = expense;
-        return Promise.all([
-          sw.updateExpense({ id: snapshot.val().splitwise_id, ...rest }),
-          ref.child(pending_transaction_id).remove()
-        ]);
+        return Promise.all(
+          snapshot.val() && snapshot.val().splitwise_id
+            ? [
+                sw
+                  .updateExpense({ id: snapshot.val().splitwise_id, ...rest })
+                  .then(res => res[0]),
+                ref.child(pending_transaction_id).remove()
+              ]
+            : [sw.createExpense(expense)]
+        );
       });
   }
   return Promise.all([sw.createExpense(expense)]);
