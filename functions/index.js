@@ -64,6 +64,8 @@ exports.events = functions.https.onRequest((request, response) => {
           );
         }
       });
+  } else if (request.body.webhook_code === "ERROR") {
+    functions.logger.error(request.body.error);
   }
 
   response.sendStatus(200);
